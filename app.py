@@ -19,6 +19,7 @@ from src.ai.stock_analyzer import AIStockAnalyzer
 from src.ai.report_generator import ReportGenerator
 from src.risk.fund_allocator import FundAllocationCalculator, PositionSizeMethod
 from src.models.stock_data import MarketContext
+from src.screener.stock_screener import IntelligentStockScreener
 
 # 設定頁面配置
 st.set_page_config(
@@ -68,12 +69,15 @@ class TaiwanStockApp:
         self.data_provider = TaiwanMarketDataProvider()
         self.report_generator = ReportGenerator()
         self.fund_allocator = FundAllocationCalculator()
+        self.intelligent_screener = None  # 將在設定API Key後初始化
         
         # 初始化session state
         if 'analysis_results' not in st.session_state:
             st.session_state.analysis_results = []
         if 'current_report' not in st.session_state:
             st.session_state.current_report = None
+        if 'daily_recommendations' not in st.session_state:
+            st.session_state.daily_recommendations = []
         if 'openai_api_key' not in st.session_state:
             # 優先從環境變數讀取API Key
             st.session_state.openai_api_key = os.getenv('OPENAI_API_KEY', "")
@@ -214,13 +218,17 @@ class TaiwanStockApp:
     def main_content(self):
         """主要內容區域"""
         
+        # 初始化智能篩選器
+        if st.session_state.openai_api_key and self.intelligent_screener is None:
+            self.intelligent_screener = IntelligentStockScreener(st.session_state.openai_api_key)
+        
         # 頁籤選擇
         tab1, tab2, tab3, tab4 = st.tabs([
-            "🎯 股票分析", "📊 分析報告", "💰 倉位管理", "📈 系統監控"
+            "🌟 每日推薦", "📊 分析報告", "💰 倉位管理", "📈 系統監控"
         ])
         
         with tab1:
-            self.stock_analysis_tab()
+            self.daily_recommendations_tab()
         
         with tab2:
             self.analysis_report_tab()
@@ -231,106 +239,337 @@ class TaiwanStockApp:
         with tab4:
             self.system_monitor_tab()
     
-    def stock_analysis_tab(self):
-        """股票分析頁籤"""
+    def daily_recommendations_tab(self):
+        """每日推薦頁籤"""
         
-        st.header("🎯 智能股票分析")
+        st.header("🌟 每日智能推薦")
+        st.markdown("AI自動掃描台股市場，為您挑選最適合當沖的股票機會")
         
-        # 股票代號輸入
-        col1, col2, col3 = st.columns([2, 1, 1])
+        # 篩選參數設定
+        st.subheader("🔧 篩選參數")
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            stock_symbols = st.text_input(
-                "請輸入股票代號 (多個代號用逗號分隔)",
-                placeholder="例如: 2330, 2454, 2317",
-                help="台股代號，例如台積電為2330"
+            max_recommendations = st.number_input(
+                "最大推薦數量",
+                min_value=5,
+                max_value=20,
+                value=10,
+                help="系統最多推薦的股票數量"
             )
         
         with col2:
-            analysis_depth = st.selectbox(
-                "分析深度",
-                ["標準分析", "深度分析", "快速掃描"],
-                index=0
+            min_score = st.slider(
+                "最低評分要求",
+                min_value=50.0,
+                max_value=90.0,
+                value=70.0,
+                step=5.0,
+                help="只顯示評分高於此標準的股票"
             )
         
         with col3:
-            max_stocks = st.number_input(
-                "最大分析數量",
-                min_value=1,
-                max_value=50,
-                value=10
+            use_ai_analysis = st.checkbox(
+                "使用AI深度分析",
+                value=True if st.session_state.openai_api_key else False,
+                disabled=not bool(st.session_state.openai_api_key),
+                help="需要OpenAI API Key才能使用"
             )
         
-        # 分析按鈕
-        if st.button("🚀 開始AI分析", type="primary"):
-            if not stock_symbols.strip():
-                st.error("請輸入至少一個股票代號")
-                return
-            
-            # 解析股票代號
-            symbols = [s.strip() for s in stock_symbols.split(",") if s.strip()]
-            symbols = symbols[:max_stocks]  # 限制數量
-            
-            with st.spinner("🤖 AI正在分析中，請稍候..."):
-                self.perform_stock_analysis(symbols, analysis_depth)
+        with col4:
+            auto_refresh = st.checkbox(
+                "自動刷新",
+                value=False,
+                help="每分鐘自動更新推薦"
+            )
         
-        # 顯示分析結果
-        if st.session_state.analysis_results:
-            self.display_analysis_results()
+        # 獲取推薦按鈕
+        col1, col2 = st.columns([1, 3])
+        
+        with col1:
+            if st.button("🚀 獲取今日推薦", type="primary"):
+                if not self.intelligent_screener:
+                    st.error("請先設定OpenAI API Key")
+                    return
+                
+                with st.spinner("🤖 AI正在掃描市場，分析股票..."):
+                    self.get_daily_recommendations(max_recommendations, min_score, use_ai_analysis)
+        
+        with col2:
+            if st.button("🔄 刷新推薦"):
+                if not self.intelligent_screener:
+                    st.error("請先設定OpenAI API Key")
+                    return
+                    
+                with st.spinner("🔄 更新推薦中..."):
+                    self.get_daily_recommendations(max_recommendations, min_score, use_ai_analysis)
+        
+        # 顯示股票池資訊
+        if st.expander("📊 查看股票池資訊"):
+            if self.intelligent_screener:
+                universe_info = self.intelligent_screener.get_stock_universe_info()
+                st.write(f"**總股票數**: {universe_info['total_stocks']}")
+                
+                # 按類別顯示股票
+                for category, stocks in universe_info['categories'].items():
+                    st.write(f"**{category}**: {', '.join(stocks)}")
+                
+                st.write("**篩選條件**:")
+                for criteria, value in universe_info['screening_criteria'].items():
+                    st.write(f"- {criteria}: {value}")
+        
+        # 顯示推薦結果
+        if st.session_state.daily_recommendations:
+            self.display_daily_recommendations()
+        else:
+            st.info("💡 點擊「獲取今日推薦」開始AI智能選股")
     
-    def perform_stock_analysis(self, symbols: List[str], depth: str):
-        """執行股票分析"""
+    def get_daily_recommendations(self, max_recommendations: int, min_score: float, use_ai_analysis: bool):
+        """獲取每日推薦"""
         
         try:
-            # 初始化AI分析器
-            ai_analyzer = AIStockAnalyzer(st.session_state.openai_api_key)
+            # 獲取推薦
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-            # 獲取股票數據
-            stock_data_list = []
-            progress_bar = st.progress(0)
-            
-            for i, symbol in enumerate(symbols):
-                try:
-                    # 更新進度
-                    progress_bar.progress((i + 1) / len(symbols))
+            try:
+                recommendations = loop.run_until_complete(
+                    self.intelligent_screener.get_daily_recommendations(
+                        max_recommendations=max_recommendations,
+                        min_score=min_score
+                    )
+                )
+                
+                # 保存推薦結果
+                st.session_state.daily_recommendations = recommendations
+                
+                # 轉換為AIAnalysisResult格式以兼容現有報告系統
+                analysis_results = []
+                for rec in recommendations:
+                    # 創建compatible格式
+                    from src.ai.stock_analyzer import AIAnalysisResult
                     
-                    # 獲取股票數據
-                    stock_data = self.data_provider.get_comprehensive_stock_data(symbol)
-                    if stock_data:
-                        stock_data_list.append(stock_data)
-                    
-                except Exception as e:
-                    st.warning(f"無法獲取 {symbol} 的數據: {str(e)}")
-            
-            if not stock_data_list:
-                st.error("無法獲取任何股票數據，請檢查代號是否正確")
-                return
-            
-            # 執行AI分析
-            st.info(f"📊 成功獲取 {len(stock_data_list)} 支股票數據，開始AI分析...")
-            
-            market_context = self._create_market_context()
-            
-            # 批量分析
-            analysis_results = ai_analyzer.analyze_multiple_stocks(
-                stock_data_list, 
-                market_context,
-                max_concurrent=3
-            )
-            
-            # 保存結果
-            st.session_state.analysis_results = analysis_results
-            
-            # 生成報告
-            report = self.report_generator.generate_daily_screening_report(
-                analysis_results, market_context
-            )
-            st.session_state.current_report = report
-            
-            st.success(f"✅ 分析完成！共分析 {len(analysis_results)} 支股票")
-            
+                    ai_result = AIAnalysisResult(
+                        stock_symbol=rec.symbol,
+                        overall_score=rec.recommendation_score,
+                        recommendation=self._convert_to_recommendation_level(rec.recommendation_score),
+                        key_insights=[rec.reason],
+                        risk_warnings=[f"風險等級: {rec.risk_level}"],
+                        strategy_advice=rec.recommended_strategy,
+                        entry_timing=f"進場價: {rec.entry_price:.2f}, 出場價: {rec.exit_price:.2f}, 目標價: {rec.target_price:.2f}",
+                        confidence_level=rec.confidence,
+                        reasoning=rec.reason
+                    )
+                    analysis_results.append(ai_result)
+                
+                st.session_state.analysis_results = analysis_results
+                
+                # 生成報告
+                market_context = self._create_market_context()
+                report = self.report_generator.generate_daily_screening_report(
+                    analysis_results, market_context
+                )
+                st.session_state.current_report = report
+                
+                st.success(f"✅ 成功獲取 {len(recommendations)} 個推薦！")
+                
+            finally:
+                loop.close()
+                
         except Exception as e:
-            st.error(f"分析過程中發生錯誤: {str(e)}")
+            st.error(f"獲取推薦時發生錯誤: {str(e)}")
+            st.exception(e)  # 顯示詳細錯誤信息
+    
+    def _convert_to_recommendation_level(self, score: float) -> str:
+        """轉換評分為推薦等級"""
+        if score >= 85:
+            return "強烈推薦"
+        elif score >= 75:
+            return "推薦"
+        elif score >= 60:
+            return "中性"
+        elif score >= 50:
+            return "謹慎"
+        else:
+            return "避免"
+    
+    def display_daily_recommendations(self):
+        """顯示每日推薦結果"""
+        
+        st.subheader("🎯 今日精選推薦")
+        
+        recommendations = st.session_state.daily_recommendations
+        
+        if not recommendations:
+            st.info("暫無推薦結果")
+            return
+        
+        # 推薦統計
+        total_recs = len(recommendations)
+        high_score_count = len([r for r in recommendations if r.recommendation_score >= 80])
+        avg_score = sum(r.recommendation_score for r in recommendations) / total_recs
+        avg_confidence = sum(r.confidence for r in recommendations) / total_recs
+        
+        # 顯示關鍵指標
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("推薦股票", total_recs)
+        
+        with col2:
+            st.metric("高分標的", high_score_count, f"{high_score_count/total_recs:.1%}")
+        
+        with col3:
+            st.metric("平均評分", f"{avg_score:.1f}")
+        
+        with col4:
+            st.metric("平均信心度", f"{avg_confidence:.1%}")
+        
+        # 推薦卡片顯示
+        st.subheader("📋 推薦詳情")
+        
+        for i, rec in enumerate(recommendations):
+            # 動態設定顏色
+            if rec.recommendation_score >= 85:
+                border_color = "#28a745"  # 綠色 - 強烈推薦
+            elif rec.recommendation_score >= 75:
+                border_color = "#17a2b8"  # 藍色 - 推薦
+            elif rec.recommendation_score >= 65:
+                border_color = "#ffc107"  # 黃色 - 中性
+            else:
+                border_color = "#dc3545"  # 紅色 - 謹慎
+            
+            with st.container():
+                st.markdown(f"""
+                <div style="border-left: 4px solid {border_color}; padding-left: 1rem; margin: 1rem 0; background: #f8f9fa; border-radius: 0.5rem; padding: 1rem;">
+                    <h4 style="margin: 0; color: {border_color};">#{i+1} {rec.symbol} - {rec.name}</h4>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+                
+                with col1:
+                    st.markdown("**📊 價格資訊**")
+                    st.write(f"📈 昨收: **{rec.previous_close:.2f}** 元")
+                    st.write(f"💰 現價: **{rec.current_price:.2f}** 元")
+                    
+                    # 顯示漲跌幅，使用顏色標示
+                    if rec.price_change_pct > 0:
+                        st.write(f"🔺 漲跌: **+{rec.price_change:.2f}** (+{rec.price_change_pct:.2f}%)")
+                    elif rec.price_change_pct < 0:
+                        st.write(f"🔻 漲跌: **{rec.price_change:.2f}** ({rec.price_change_pct:.2f}%)")
+                    else:
+                        st.write(f"➖ 漲跌: **{rec.price_change:.2f}** (0.00%)")
+                    
+                    st.write(f"📦 成交量: **{rec.volume:,}** 股")
+                
+                with col2:
+                    st.markdown("**💡 分析指標**")
+                    st.write(f"🎯 評分: **{rec.recommendation_score:.1f}**/100")
+                    st.write(f"🔮 信心度: **{rec.confidence:.1%}**")
+                    st.write(f"📊 量比: **{rec.volume_ratio:.2f}**")
+                    st.write(f"🔄 週轉率: **{rec.turnover_rate:.3%}**")
+                
+                with col3:
+                    st.markdown("**🎯 交易建議**")
+                    st.write(f"📈 策略: **{rec.recommended_strategy}**")
+                    st.write(f"🟢 進場價: **{rec.entry_price:.2f}** 元")
+                    st.write(f"🟡 出場價: **{rec.exit_price:.2f}** 元")
+                    st.write(f"🟠 目標價: **{rec.target_price:.2f}** 元")
+                    st.write(f"🔴 停損價: **{rec.stop_loss:.2f}** 元")
+                
+                with col4:
+                    st.markdown("**📈 獲利分析**")
+                    
+                    # 計算各階段獲利
+                    conservative_profit = ((rec.exit_price - rec.entry_price) / rec.entry_price) * 100
+                    aggressive_profit = ((rec.target_price - rec.entry_price) / rec.entry_price) * 100
+                    risk_potential = ((rec.entry_price - rec.stop_loss) / rec.entry_price) * 100
+                    
+                    st.write(f"✅ 保守獲利: **+{conservative_profit:.1f}%**")
+                    st.write(f"🚀 積極獲利: **+{aggressive_profit:.1f}%**")
+                    st.write(f"⚠️ 最大風險: **-{risk_potential:.1f}%**")
+                    
+                    # 風險報酬比
+                    risk_reward_ratio = aggressive_profit / risk_potential if risk_potential > 0 else 0
+                    st.write(f"⚖️ 風報比: **1:{risk_reward_ratio:.1f}**")
+                
+                # 推薦原因單獨一行
+                st.markdown("**💭 推薦原因**")
+                st.write(f"📝 {rec.reason}")
+                st.write(f"⚠️ 風險等級: **{rec.risk_level}**")
+                
+                st.markdown("---")
+        
+        # 快速操作區
+        st.subheader("⚡ 快速操作")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("📊 查看詳細報告"):
+                st.session_state.active_tab = 1  # 切換到報告頁籤
+                st.experimental_rerun()
+        
+        with col2:
+            if st.button("💰 計算倉位配置"):
+                st.session_state.active_tab = 2  # 切換到倉位管理頁籤
+                st.experimental_rerun()
+        
+        with col3:
+            # 導出推薦結果
+            if st.button("📤 導出推薦"):
+                self.export_recommendations()
+    
+    def export_recommendations(self):
+        """導出推薦結果"""
+        
+        if not st.session_state.daily_recommendations:
+            st.warning("沒有推薦結果可導出")
+            return
+        
+        # 準備導出數據
+        export_data = []
+        for i, rec in enumerate(st.session_state.daily_recommendations):
+            conservative_profit = ((rec.exit_price - rec.entry_price) / rec.entry_price) * 100
+            aggressive_profit = ((rec.target_price - rec.entry_price) / rec.entry_price) * 100
+            risk_potential = ((rec.entry_price - rec.stop_loss) / rec.entry_price) * 100
+            
+            export_data.append({
+                "排名": i + 1,
+                "股票代號": rec.symbol,
+                "股票名稱": rec.name,
+                "昨日收盤": rec.previous_close,
+                "現價": rec.current_price,
+                "漲跌": rec.price_change,
+                "漲跌幅(%)": f"{rec.price_change_pct:.2f}%",
+                "成交量": rec.volume,
+                "量比": rec.volume_ratio,
+                "週轉率(%)": f"{rec.turnover_rate:.3f}%",
+                "評分": rec.recommendation_score,
+                "推薦策略": rec.recommended_strategy,
+                "建議進場價": rec.entry_price,
+                "建議出場價": rec.exit_price,
+                "積極目標價": rec.target_price,
+                "停損價": rec.stop_loss,
+                "保守獲利(%)": f"{conservative_profit:.1f}%",
+                "積極獲利(%)": f"{aggressive_profit:.1f}%",
+                "最大風險(%)": f"{risk_potential:.1f}%",
+                "信心度": f"{rec.confidence:.1%}",
+                "風險等級": rec.risk_level,
+                "推薦原因": rec.reason
+            })
+        
+        # 轉換為DataFrame
+        df = pd.DataFrame(export_data)
+        
+        # CSV格式下載
+        csv = df.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button(
+            label="📄 下載CSV格式",
+            data=csv,
+            file_name=f"daily_recommendations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
     
     def display_analysis_results(self):
         """顯示分析結果"""

@@ -201,6 +201,11 @@ class ReportGenerator:
         
         # 統計分析
         total_stocks = len(ai_results)
+        
+        # 如果沒有分析結果，返回默認洞察
+        if total_stocks == 0:
+            return ["暫無分析結果", "建議稍後重試或調整篩選條件"]
+        
         strong_buy_count = len([r for r in ai_results if r.recommendation == '強烈推薦'])
         avg_score = sum(r.overall_score for r in ai_results) / total_stocks if total_stocks > 0 else 0
         
@@ -226,10 +231,11 @@ class ReportGenerator:
         
         # 市場狀況洞察
         high_score_count = len([r for r in ai_results if r.overall_score > 75])
-        if high_score_count / total_stocks > 0.3:
-            insights.append("市場機會豐富，多數標的表現良好")
-        elif high_score_count / total_stocks < 0.1:
-            insights.append("市場機會有限，建議謹慎操作")
+        if total_stocks > 0:  # 防止除零錯誤
+            if high_score_count / total_stocks > 0.3:
+                insights.append("市場機會豐富，多數標的表現良好")
+            elif high_score_count / total_stocks < 0.1:
+                insights.append("市場機會有限，建議謹慎操作")
         
         return insights[:8]  # 最多8個洞察
     
@@ -240,6 +246,11 @@ class ReportGenerator:
         
         # 統計風險分布
         total_stocks = len(ai_results)
+        
+        # 如果沒有分析結果，返回默認警示
+        if total_stocks == 0:
+            return ["暫無分析數據", "請先執行股票分析"]
+        
         high_risk_count = len([r for r in ai_results if len(r.risk_warnings) >= 3])
         low_confidence_count = len([r for r in ai_results if r.confidence_level < 0.5])
         

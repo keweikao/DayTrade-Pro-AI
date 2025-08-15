@@ -289,6 +289,26 @@ class TaiwanStockApp:
         else:
             st.info("🔴 台股休市中 - 使用模擬數據進行演示")
         
+        # 新增流動性要求說明
+        with st.expander("📋 當沖篩選標準"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**🔥 嚴格標準 (專業當沖)**")
+                st.write("• 成交量比率 > 1.5")
+                st.write("• 日成交量 > 500萬股")
+                st.write("• 平均真實波幅 > 2.0%")
+                st.write("• 股價範圍: 15-800元")
+            
+            with col2:
+                st.markdown("**🌟 寬鬆標準 (一般當沖)**")
+                st.write("• 成交量比率 > 1.0")
+                st.write("• 日成交量 > 200萬股") 
+                st.write("• 平均真實波幅 > 1.5%")
+                st.write("• 股價範圍: 10-1200元")
+            
+            st.info("💡 系統會優先使用嚴格標準，如無結果則自動降級至寬鬆標準，確保流動性充足的當沖標的。")
+        
         # 獲取推薦按鈕
         col1, col2 = st.columns([1, 3])
         

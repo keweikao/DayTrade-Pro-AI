@@ -241,21 +241,30 @@ class IntelligentStockScreener:
             
             # 設定不同的標準
             if strict_mode:
-                min_volume_ratio = 0.8
-                min_atr_pct = 0.015
-                min_price, max_price = 10, 1000
-                min_rsi, max_rsi = 10, 90
+                # 嚴格標準 - 專業當沖要求
+                min_volume_ratio = 1.5  # 成交量至少是平均的150%
+                min_daily_volume = 5000000  # 單日成交量至少500萬股
+                min_atr_pct = 0.02  # ATR至少2%
+                min_price, max_price = 15, 800
+                min_rsi, max_rsi = 15, 85
             else:
-                # 寬鬆標準 - 用於確保有結果
-                min_volume_ratio = 0.3
-                min_atr_pct = 0.005
-                min_price, max_price = 5, 2000
-                min_rsi, max_rsi = 5, 95
+                # 寬鬆標準 - 但仍保持當沖基本要求
+                min_volume_ratio = 1.0  # 成交量至少是平均的100%
+                min_daily_volume = 2000000  # 單日成交量至少200萬股
+                min_atr_pct = 0.015  # ATR至少1.5%
+                min_price, max_price = 10, 1200
+                min_rsi, max_rsi = 10, 90
             
             # 1. 流動性檢查 - 成交量足夠
             volume_ratio = stock_data.volume_ratio
+            daily_volume = stock_data.current_market.volume
+            
             if volume_ratio < min_volume_ratio:
                 print(f"   ❌ {symbol} 量比不足: {volume_ratio:.2f} < {min_volume_ratio}")
+                return False
+            
+            if daily_volume < min_daily_volume:
+                print(f"   ❌ {symbol} 日成交量不足: {daily_volume:,} < {min_daily_volume:,} 股")
                 return False
             
             # 2. 波動性檢查 - 有足夠的價格變動
@@ -277,7 +286,7 @@ class IntelligentStockScreener:
                 return False
             
             mode_text = "嚴格" if strict_mode else "寬鬆"
-            print(f"   ✅ {symbol} 通過{mode_text}篩選 (量比:{volume_ratio:.2f}, ATR:{atr_pct:.3f}, 價格:{current_price:.2f}, RSI:{rsi:.1f})")
+            print(f"   ✅ {symbol} 通過{mode_text}篩選 (量比:{volume_ratio:.2f}, 日量:{daily_volume:,}, ATR:{atr_pct:.3f}, 價格:{current_price:.2f}, RSI:{rsi:.1f})")
             return True
             
         except Exception as e:
@@ -444,10 +453,11 @@ class IntelligentStockScreener:
             "total_stocks": len(self.stock_universe),
             "categories": categories_samples,
             "screening_criteria": {
-                "成交量比率": "> 0.8 (嚴格) / > 0.3 (寬鬆)",
-                "平均真實波幅": "> 1.5% (嚴格) / > 0.5% (寬鬆)",
-                "股價範圍": "10-1000元 (嚴格) / 5-2000元 (寬鬆)",
-                "RSI範圍": "10-90 (嚴格) / 5-95 (寬鬆)"
+                "成交量比率": "> 1.5 (嚴格) / > 1.0 (寬鬆)",
+                "日成交量": "> 500萬股 (嚴格) / > 200萬股 (寬鬆)",
+                "平均真實波幅": "> 2.0% (嚴格) / > 1.5% (寬鬆)",
+                "股價範圍": "15-800元 (嚴格) / 10-1200元 (寬鬆)",
+                "RSI範圍": "15-85 (嚴格) / 10-90 (寬鬆)"
             },
             "data_sources": [
                 "台灣證券交易所 (上市)",

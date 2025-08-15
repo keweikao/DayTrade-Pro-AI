@@ -209,8 +209,13 @@ class TaiwanMarketDataProvider:
             high_price = max(open_price, current_price) * (1 + random.random() * daily_volatility)
             low_price = min(open_price, current_price) * (1 - random.random() * daily_volatility)
             
-            # 模擬成交量
-            base_volume = 1000000 + random.randint(0, 5000000)  # 100萬-600萬股
+            # 模擬成交量 - 確保當沖適用的成交量
+            popular_stocks = {"2330", "2317", "2454", "2308", "3008", "2880", "2882", "2002", "1303", "1301"}
+            
+            if symbol in popular_stocks:
+                base_volume = 3000000 + random.randint(0, 12000000)  # 熱門股票：300萬-1500萬股
+            else:
+                base_volume = 1500000 + random.randint(0, 6000000)   # 一般股票：150萬-750萬股
             
             price_data = StockPrice(
                 date=date,
@@ -284,11 +289,21 @@ class TaiwanMarketDataProvider:
         spread_pct = 0.001 + random.random() * 0.002  # 0.1%-0.3% 價差
         spread = current_price * spread_pct
         
-        # 模擬成交量
-        if self.is_taiwan_market_open():
-            base_volume = 10000 + random.randint(0, 100000)  # 開盤時較大量
+        # 模擬成交量 - 提高當沖適用股票的成交量
+        popular_stocks = {"2330", "2317", "2454", "2308", "3008", "2880", "2882", "2002", "1303", "1301"}
+        
+        if symbol in popular_stocks:
+            # 熱門股票較大成交量
+            if self.is_taiwan_market_open():
+                base_volume = 5000000 + random.randint(0, 10000000)  # 500萬-1500萬股
+            else:
+                base_volume = 2000000 + random.randint(0, 5000000)   # 200萬-700萬股
         else:
-            base_volume = 1000 + random.randint(0, 10000)   # 非開盤時較小量
+            # 一般股票中等成交量
+            if self.is_taiwan_market_open():
+                base_volume = 1000000 + random.randint(0, 3000000)   # 100萬-400萬股
+            else:
+                base_volume = 500000 + random.randint(0, 2000000)    # 50萬-250萬股
         
         return MarketData(
             bid_price=round(current_price - spread/2, 2),

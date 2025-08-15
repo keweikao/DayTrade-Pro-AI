@@ -304,19 +304,70 @@ class TaiwanStockApp:
                 with st.spinner("🔄 更新推薦中..."):
                     self.get_daily_recommendations(max_recommendations, min_score, use_ai_analysis)
         
-        # 顯示股票池資訊
-        if st.expander("📊 查看股票池資訊"):
+        # 顯示股票池資訊與擴展選項
+        with st.expander("📊 股票池管理"):
             if self.intelligent_screener:
                 universe_info = self.intelligent_screener.get_stock_universe_info()
-                st.write(f"**總股票數**: {universe_info['total_stocks']}")
                 
-                # 按類別顯示股票
-                for category, stocks in universe_info['categories'].items():
-                    st.write(f"**{category}**: {', '.join(stocks)}")
+                col1, col2 = st.columns([2, 1])
                 
-                st.write("**篩選條件**:")
-                for criteria, value in universe_info['screening_criteria'].items():
-                    st.write(f"- {criteria}: {value}")
+                with col1:
+                    st.write(f"**目前總股票數**: {universe_info['total_stocks']}")
+                    
+                    # 按類別顯示股票樣本
+                    for category, stocks in universe_info['categories'].items():
+                        st.write(f"**{category}**: {', '.join(stocks[:3])}... (共{len(stocks)}支樣本)")
+                    
+                    st.write("**篩選條件**:")
+                    for criteria, value in universe_info['screening_criteria'].items():
+                        st.write(f"- {criteria}: {value}")
+                
+                with col2:
+                    st.markdown("**📈 擴展股票池**")
+                    
+                    # 快速擴展選項
+                    expand_option = st.selectbox(
+                        "選擇擴展類別",
+                        ["不擴展", "大型權值股", "中小型成長股", "金融完整版", "生技醫療全", "航運海運全", "熱門ETF"],
+                        key="expand_stocks"
+                    )
+                    
+                    if st.button("🚀 擴展股票池"):
+                        if expand_option != "不擴展":
+                            added_count = self.intelligent_screener.add_stocks_by_category(expand_option)
+                            if added_count > 0:
+                                st.success(f"成功添加 {added_count} 支股票！")
+                                st.experimental_rerun()
+                    
+                    # 載入市值大股票
+                    st.markdown("**🏆 載入市值排行**")
+                    top_n = st.selectbox("市值前N大", [50, 100, 150], index=1)
+                    
+                    if st.button("📊 載入市值股"):
+                        added_count = self.intelligent_screener.load_taiwan_top_stocks(top_n)
+                        if added_count > 0:
+                            st.success(f"成功載入前 {top_n} 大市值股票，新增 {added_count} 支！")
+                            st.experimental_rerun()
+                    
+                    # 手動添加股票
+                    st.markdown("**✏️ 手動添加**")
+                    custom_stocks = st.text_input(
+                        "輸入股票代號 (逗號分隔)",
+                        placeholder="例如: 2330,2454,2317",
+                        key="custom_stocks"
+                    )
+                    
+                    if st.button("➕ 添加自定義股票"):
+                        if custom_stocks.strip():
+                            new_stocks = [s.strip() for s in custom_stocks.split(",") if s.strip()]
+                            original_count = len(self.intelligent_screener.stock_universe)
+                            self.intelligent_screener.update_stock_universe(new_stocks)
+                            added_count = len(self.intelligent_screener.stock_universe) - original_count
+                            if added_count > 0:
+                                st.success(f"成功添加 {added_count} 支股票！")
+                                st.experimental_rerun()
+                            else:
+                                st.info("這些股票已經在股票池中了")
         
         # 顯示推薦結果
         if st.session_state.daily_recommendations:

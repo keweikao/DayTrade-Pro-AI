@@ -22,8 +22,8 @@ from src.models.stock_data import MarketContext
 
 # 設定頁面配置
 st.set_page_config(
-    page_title="台股當沖AI選股系統",
-    page_icon="📈",
+    page_title="DayTrade Pro AI - 專業當沖智能分析",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -82,7 +82,9 @@ class TaiwanStockApp:
         """運行主應用程式"""
         
         # 主標題
-        st.markdown('<h1 class="main-header">📈 台股當沖AI選股系統</h1>', 
+        st.markdown('<h1 class="main-header">⚡ DayTrade Pro AI</h1>', 
+                   unsafe_allow_html=True)
+        st.markdown('<p style="text-align: center; color: #666; font-size: 1.2rem; margin-top: -1rem;">專業當沖智能分析系統 | 精準交易，智勝市場</p>', 
                    unsafe_allow_html=True)
         
         # 側邊欄設定

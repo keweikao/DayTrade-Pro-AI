@@ -27,7 +27,7 @@ def main():
         '--server.enableXsrfProtection', 'false'
     ]
     
-    print(f"🚀 Starting Taiwan Stock AI System on port {port}")
+    print(f"⚡ Starting DayTrade Pro AI System on port {port}")
     print(f"Command: {' '.join(cmd)}")
     
     # 執行命令

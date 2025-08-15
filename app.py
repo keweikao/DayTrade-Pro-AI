@@ -797,10 +797,18 @@ class TaiwanStockApp:
         
         # 簡化的市場環境（實際應用中應從真實數據獲取）
         return MarketContext(
-            is_market_bullish=True,  # 假設多頭市場
-            volatility_environment="medium_volatility",
-            trading_session="trading",
-            market_sentiment="neutral"
+            taiex=17000.0,  # 假設台指點位
+            taiex_change=50.0,  # 假設上漲50點
+            taiex_change_pct=0.003,  # 上漲0.3%
+            vix=18.5,  # VIX指數
+            foreign_investment=15.2,  # 外資買超15.2億
+            sector_performance={
+                "半導體": 0.012,
+                "金融": -0.005,
+                "電子": 0.008
+            },
+            market_sentiment="neutral",
+            trading_session="trading"
         )
 
 # 主程式入口

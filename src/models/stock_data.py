@@ -110,6 +110,11 @@ class ComprehensiveStockData:
     _volatility_cache: Optional[float] = None
     
     @property
+    def symbol(self) -> str:
+        """股票代號（向後兼容性）"""
+        return self.info.code
+    
+    @property
     def current_price(self) -> float:
         """現價"""
         return self.current_market.last_price

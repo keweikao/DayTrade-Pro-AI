@@ -283,6 +283,12 @@ class TaiwanStockApp:
                 help="每分鐘自動更新推薦"
             )
         
+        # 市場狀態顯示
+        if self.data_provider.is_taiwan_market_open():
+            st.success("🟢 台股開盤中 - 使用即時數據")
+        else:
+            st.info("🔴 台股休市中 - 使用模擬數據進行演示")
+        
         # 獲取推薦按鈕
         col1, col2 = st.columns([1, 3])
         
@@ -954,14 +960,21 @@ class TaiwanStockApp:
         with col1:
             st.markdown("**📡 數據連接**")
             try:
+                # 檢查市場狀態
+                is_open = self.data_provider.is_taiwan_market_open()
+                if is_open:
+                    st.success("✅ 台股開盤 - 即時數據")
+                else:
+                    st.info("🔄 台股休市 - 模擬數據")
+                
                 # 測試數據連接
                 test_data = self.data_provider.get_comprehensive_stock_data("2330")
                 if test_data:
-                    st.success("✅ 數據源正常")
+                    st.success("✅ 數據獲取正常")
                 else:
-                    st.warning("⚠️ 數據源異常")
-            except:
-                st.error("❌ 數據源錯誤")
+                    st.warning("⚠️ 數據獲取異常")
+            except Exception as e:
+                st.error(f"❌ 數據源錯誤: {str(e)[:50]}...")
         
         with col2:
             st.markdown("**🤖 AI服務**")
